@@ -75,6 +75,13 @@ class MongoHelper:
         collection = self._get_collection(database, collection)
         return collection.find_one(query)
 
+    def get_docs(self, database: str, collection: str, query: dict[str, any]) -> list[dict[str, any]]:
+        """
+            This method will get the documents in the collection of the database
+        """
+        collection = self._get_collection(database, collection)
+        return list(collection.find(query))
+
     def delete_doc(self, database: str, collection: str, query: dict[str, any]) -> None:
         """
             This method will delete the document in the collection of the database
