@@ -68,6 +68,13 @@ class MongoHelper:
         collection = self._get_collection(database, collection)
         collection.replace_one({"_id": record["_id"]}, record, upsert=True)
 
+    def insert_docs(self, database: str, collection: str, records: list[dict[str, any]]) -> None:
+        """
+            This method will insert/update the documents in the collection of the database
+        """
+        collection = self._get_collection(database, collection)
+        collection.insert_many(records)
+
     def get_doc(self, database: str, collection: str, query: dict[str, any]) -> dict[str, any] | None:
         """
             This method will get the document in the collection of the database

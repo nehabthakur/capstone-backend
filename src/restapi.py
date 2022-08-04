@@ -2,11 +2,14 @@ import hashlib
 import json
 import os
 from datetime import timedelta
+from io import StringIO
 from typing import Optional, Dict, Any
 
+import pandas as pd
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS, cross_origin
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, verify_jwt_in_request
+from werkzeug.utils import secure_filename
 
 from src.utils.mongo_helper import MongoHelper
 
@@ -28,51 +31,11 @@ credentials = json.loads(os.environ['MONGO_CREDS'])
 
 @app.before_request
 def before_request():
-    if request.path not in ('/sign-in', '/sign-up'):
+    if request.path != '/sign-in':
         verify_jwt_in_request()
 
     if request.method == 'OPTIONS':
         return Response(status=200)
-
-
-@app.route("/sign-up", methods=["POST"])
-@cross_origin()
-def sign_up() -> Response:
-    body = request.get_json()
-    email = body.get("email", "")
-    password = body.get("password", "")
-    name = body.get("name", "")
-
-    if not email or not password or not name:
-        return Response("Body doesn't contain required parameters", 400)
-
-    _id = hashlib.sha256(email.encode('UTF-8')).hexdigest()
-
-    mongo_helper = MongoHelper(credentials)
-    result = mongo_helper.get_doc(
-        database='capstone',
-        collection='users',
-        query={
-            '_id': _id
-        }
-    )
-
-    if result:
-        return Response(f"User with email: {email} already registered", 409)
-
-    mongo_helper.insert_doc(
-        database='capstone',
-        collection='users',
-        record={
-            '_id': _id,
-            'email': email,
-            'password_hash': hashlib.sha256(password.encode('UTF-8')).hexdigest(),
-            'name': name,
-            'roles': ['student']
-        }
-    )
-
-    return Response("User successfully registered", 201)
 
 
 @app.route("/sign-in", methods=["POST"])
@@ -165,6 +128,29 @@ def get_supervisor(supervisor_id: str) -> Response:
 
 
 @cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/supervisor/overview", methods=["GET"])
+def get_supervisor_overview() -> Response:
+    user_details = authenticate(get_jwt_identity())
+
+    if not user_details or 'supervisor' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    mongo_helper = MongoHelper(credentials)
+    result = mongo_helper.get_doc(
+        database='capstone',
+        collection='supervisors',
+        query={'_id': hashlib.sha256(user_details['email'].encode('UTF-8')).hexdigest()}
+    )
+
+    if not result:
+        return Response("Supervisor not found", 404)
+
+    del result['_id']
+
+    return jsonify(result)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
 @app.route("/supervisor", methods=["POST"])
 def update_supervisor() -> Response:
     user_details = authenticate(get_jwt_identity())
@@ -209,7 +195,7 @@ def update_supervisor() -> Response:
 def get_student_overview() -> Response:
     user_details = authenticate(get_jwt_identity())
 
-    if not user_details:
+    if not user_details or 'student' not in user_details['roles']:
         return Response("Unauthorized", 401)
 
     mongo_helper = MongoHelper(credentials)
@@ -290,3 +276,276 @@ def get_student_shortlist() -> Response:
     del result["_id"]
 
     return jsonify(result)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/student/info", methods=["POST"])
+def update_student_info() -> Response:
+    user_details = authenticate(get_jwt_identity())
+
+    if not user_details or 'project_coordinator' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    form_data = request.files.get('file')
+    if not form_data:
+        return Response("No file provided", 400)
+
+    file_name = secure_filename(form_data.filename)
+    if not file_name.endswith('.csv'):
+        return Response("File must be a CSV", 400)
+
+    file_data = form_data.read().decode('UTF-8')
+
+    df = pd.read_csv(StringIO(file_data))
+    df.drop_duplicates(inplace=True)
+
+    if df.empty:
+        return Response("No data found", 400)
+
+    required_columns = (
+        'Student Code', 'Name', 'Enrolment Status', 'Programme', 'Route', 'Start Date', 'QM Email', 'Username')
+
+    if not all([column in df.columns for column in required_columns]):
+        return Response(f"Required columns are {required_columns}", 400)
+
+    column_mappings = {
+        'Student Code': 'student_code',
+        'Name': 'name',
+        'Enrolment Status': 'enrolment_status',
+        'Programme': 'programme',
+        'Route': 'route',
+        'Start Date': 'start_date',
+        'QM Email': 'email',
+        'Username': 'username'
+    }
+
+    df.rename(columns=column_mappings, inplace=True)
+
+    df['_id'] = df['email'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
+    students = df.to_dict(orient='records')
+    df['password_hash'] = hashlib.sha256('user123'.encode('UTF-8')).hexdigest()
+    df['roles'] = [['student']] * len(df)
+    users = df[['_id', 'email', 'name', 'password_hash', 'roles']].to_dict(orient='records')
+
+    mongo_helper = MongoHelper(credentials)
+
+    for student in students:
+        mongo_helper.insert_doc(
+            database='capstone',
+            collection='students',
+            record=student
+        )
+
+    for user in users:
+        mongo_helper.insert_doc(
+            database='capstone',
+            collection='users',
+            record=user
+        )
+
+    return Response("Student info updated", 200)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/supervisor/info", methods=["POST"])
+def update_supervisor_info() -> Response:
+    user_details = authenticate(get_jwt_identity())
+
+    if not user_details or 'project_coordinator' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    form_data = request.files.get('file')
+    if not form_data:
+        return Response("No file provided", 400)
+
+    file_name = secure_filename(form_data.filename)
+    if not file_name.endswith('.csv'):
+        return Response("File must be a CSV", 400)
+
+    file_data = form_data.read().decode('UTF-8')
+
+    df = pd.read_csv(StringIO(file_data))
+    df.drop_duplicates(inplace=True)
+
+    if df.empty:
+        return Response("No data found", 400)
+
+    required_columns = ('Supervisor Code', 'Name', 'Position', 'Department', 'QM Email', 'Username', 'Slots')
+    if not all([column in df.columns for column in required_columns]):
+        return Response(f"Required columns are {required_columns}", 400)
+
+    column_mappings = {
+        'Supervisor Code': 'supervisor_code',
+        'Name': 'name',
+        'Position': 'position',
+        'Department': 'department',
+        'QM Email': 'email',
+        'Username': 'username',
+        'Slots': 'slots'
+    }
+
+    df.rename(columns=column_mappings, inplace=True)
+
+    df['_id'] = df['email'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
+    supervisors = df.to_dict(orient='records')
+    df['password_hash'] = hashlib.sha256('user123'.encode('UTF-8')).hexdigest()
+    df['roles'] = [['supervisor', 'examiner']] * len(df)
+    users = df[['_id', 'email', 'name', 'password_hash', 'roles']].to_dict(orient='records')
+
+    mongo_helper = MongoHelper(credentials)
+
+    for supervisor in supervisors:
+        mongo_helper.insert_doc(
+            database='capstone',
+            collection='supervisors',
+            record=supervisor
+        )
+
+    for user in users:
+        mongo_helper.insert_doc(
+            database='capstone',
+            collection='users',
+            record=user
+        )
+
+    return Response("Supervisor info updated", 200)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/secondary_examiner/info", methods=["POST"])
+def update_secondary_examiner_info() -> Response:
+    user_details = authenticate(get_jwt_identity())
+
+    if not user_details or 'project_coordinator' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    form_data = request.files.get('file')
+    if not form_data:
+        return Response("No file provided", 400)
+
+    file_name = secure_filename(form_data.filename)
+    if not file_name.endswith('.csv'):
+        return Response("File must be a CSV", 400)
+
+    file_data = form_data.read().decode('UTF-8')
+
+    df = pd.read_csv(StringIO(file_data))
+    df.drop_duplicates(inplace=True)
+
+    if df.empty:
+        return Response("No data found", 400)
+
+    required_columns = ('Student Id', 'Student Email', 'Student Name', 'Secondary Examiner Id', 'Secondary Examiner Email', 'Secondary Examiner Name')
+    if not all([column in df.columns for column in required_columns]):
+        return Response(f"Required columns are {required_columns}", 400)
+
+    column_mappings = {
+        'Student Id': 'student_id',
+        'Student Email': 'student_email',
+        'Student Name': 'student_name',
+        'Secondary Examiner Id': 'secondary_examiner_id',
+        'Secondary Examiner Email': 'secondary_examiner_email',
+        'Secondary Examiner Name': 'secondary_examiner_name',
+    }
+
+    df.rename(columns=column_mappings, inplace=True)
+    df['_id'] = df['student_email'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
+
+    mongo_helper = MongoHelper(credentials)
+
+    for row in df.iterrows():
+        result = mongo_helper.get_doc(
+            database='capstone',
+            collection='students',
+            query={'_id': row['_id']}
+        )
+
+        if not result:
+            continue
+
+        result['second_examiner'] = {
+            'name': row['secondary_examiner_name'],
+            'email': row['secondary_examiner_email']
+        }
+
+        mongo_helper.insert_doc(
+            database='capstone',
+            collection='students',
+            record=result
+        )
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/student/project_info", methods=["POST"])
+def update_student_project_info() -> Response:
+    user_details = authenticate(get_jwt_identity())
+
+    if not user_details or 'student' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    required_fields = ('title', 'description')
+
+    body = request.get_json()
+
+    if not body or not all([field in body for field in required_fields]):
+        return Response("Empty body or Missing required fields", 400)
+
+    mongo_helper = MongoHelper(credentials)
+    result = mongo_helper.get_doc(
+        database='capstone',
+        collection='students',
+        query={'_id': user_details['_id']}
+    )
+
+    if not result:
+        return Response("Student not found", 400)
+
+    result['project'] = {
+        'title': body['title'],
+        'description': body['description']
+    }
+
+    mongo_helper.insert_doc(
+        database='capstone',
+        collection='students',
+        record=result
+    )
+
+    return Response("Project info updated", 200)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/supervisor/project_info", methods=["POST"])
+def update_supervisor_project_info() -> Response:
+    user_details = authenticate(get_jwt_identity())
+
+    if not user_details or 'supervisor' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    required_fields = ('areas', 'info', 'projects')
+
+    body = request.get_json()
+    if not body or not all([field in body for field in required_fields]):
+        return Response(f"Empty body or Missing required fields {required_fields}", 400)
+
+    mongo_helper = MongoHelper(credentials)
+    result = mongo_helper.get_doc(
+        database='capstone',
+        collection='supervisors',
+        query={'_id': user_details['_id']}
+    )
+
+    if not result:
+        return Response("Supervisor not found", 400)
+
+    result['areas'] = body['areas']
+    result['info'] = body['info']
+    result['projects'] = body['projects']
+
+    mongo_helper.insert_doc(
+        database='capstone',
+        collection='supervisors',
+        record=result
+    )
+
+    return Response("Project info updated", 200)
