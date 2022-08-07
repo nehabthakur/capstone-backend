@@ -412,6 +412,65 @@ def update_supervisor_info() -> Response:
 
 
 @cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/supervisor/assignment_info", methods=["POST"])
+def update_supervisor_assignment_info() -> Response:
+    user_details = authenticate(get_jwt_identity())
+    if not user_details or 'project_coordinator' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    form_data = request.files.get('file')
+    if not form_data:
+        return Response("No file provided", 400)
+
+    file_name = secure_filename(form_data.filename)
+    if not file_name.endswith('.csv'):
+        return Response("File must be a CSV", 400)
+
+    file_data = form_data.read().decode('UTF-8')
+    df = pd.read_csv(StringIO(file_data))
+    df.drop_duplicates(inplace=True)
+
+    if df.empty:
+        return Response("No data found", 400)
+
+    required_columns = ('Student Id', 'Student Email', 'Student Name', 'Supervisor Id', 'Supervisor Email', 'Supervisor Name')
+    if not all([column in df.columns for column in required_columns]):
+        return Response(f"Required columns are {required_columns}", 400)
+
+    column_mappings = {
+        'Student Id': 'student_id',
+        'Student Email': 'student_email',
+        'Student Name': 'student_name',
+        'Supervisor Id': 'supervisor_id',
+        'Supervisor Email': 'supervisor_email',
+        'Supervisor Name': 'supervisor_name'
+    }
+
+    df.rename(columns=column_mappings, inplace=True)
+
+    df['_id'] = df['student_email'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
+
+    mongo_helper = MongoHelper(credentials)
+
+    for row in df.iterrows():
+        student_info = mongo_helper.get_doc(
+            database='capstone',
+            collection='students',
+            query={'_id': row['_id']}
+        )
+
+        if not student_info:
+            continue
+
+        student_info['supervisor'] = {
+            'email': row['supervisor_email'],
+            'name': row['supervisor_name']
+        }
+
+    return Response("Success", 200)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
 @app.route("/secondary_examiner/info", methods=["POST"])
 def update_secondary_examiner_info() -> Response:
     user_details = authenticate(get_jwt_identity())
@@ -473,6 +532,69 @@ def update_secondary_examiner_info() -> Response:
             collection='students',
             record=result
         )
+
+    return Response("Success", 200)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/supervisor/final_grades", methods=["POST"])
+def update_final_grades() -> Response:
+    user_details = authenticate(get_jwt_identity())
+    if not user_details or 'project_coordinator' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    form_data = request.files.get('file')
+    if not form_data:
+        return Response("No file provided", 400)
+
+    file_name = secure_filename(form_data.filename)
+    if not file_name.endswith('.csv'):
+        return Response("File must be a CSV", 400)
+
+    file_data = form_data.read().decode('UTF-8')
+    df = pd.read_csv(StringIO(file_data))
+    df.drop_duplicates(inplace=True)
+
+    if df.empty:
+        return Response("No data found", 400)
+
+    required_columns = ('Student Id', 'Student Email', 'Student Name', 'Final Grade', 'Feedback')
+    if not all([column in df.columns for column in required_columns]):
+        return Response(f"Required columns are {required_columns}", 400)
+
+    column_mappings = {
+        'Student Id': 'student_id',
+        'Student Email': 'student_email',
+        'Student Name': 'student_name',
+        'Final Grade': 'final_grade',
+        'Feedback': 'feedback'
+    }
+
+    df.rename(columns=column_mappings, inplace=True)
+    df['_id'] = df['student_email'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
+
+    mongo_helper = MongoHelper(credentials)
+
+    for row in df.iterrows():
+        result = mongo_helper.get_doc(
+            database='capstone',
+            collection='students',
+            query={'_id': row['_id']}
+        )
+
+        if not result:
+            continue
+
+        result['final_grade'] = row['final_grade']
+        result['feedback'] = row['feedback']
+
+        mongo_helper.insert_doc(
+            database='capstone',
+            collection='students',
+            record=result
+        )
+
+    return Response("Success", 200)
 
 
 @cross_origin(origin='*', headers=['Content-Type'])
@@ -787,10 +909,19 @@ def update_supervisor_pending_proposal() -> Response:
         record=result
     )
 
+    if body['status'] == 'rejected':
+        return Response("Proposal rejected", 200)
+
     supervisor_info = mongo_helper.get_doc(
         database='capstone',
         collection='supervisors',
         query={'_id': user_details['_id']}
+    )
+
+    student_info = mongo_helper.get_doc(
+        database='capstone',
+        collection='students',
+        query={'_id': hashlib.sha256(body['student_email'].encode('UTF-8')).hexdigest()}
     )
 
     if not supervisor_info:
@@ -801,6 +932,23 @@ def update_supervisor_pending_proposal() -> Response:
 
     if body['student_email'] in supervisor_info['students']:
         return Response("Student already added", 400)
+
+    if not student_info:
+        return Response("Student not found", 400)
+
+    if 'supervisor' in student_info:
+        return Response("Student already has a supervisor", 400)
+
+    student_info['supervisor'] = {
+        'email': user_details['email'],
+        'name': user_details['name']
+    }
+
+    mongo_helper.insert_doc(
+        database='capstone',
+        collection='students',
+        record=student_info
+    )
 
     supervisor_info['students'].append(body['student_email'])
     mongo_helper.insert_doc(
