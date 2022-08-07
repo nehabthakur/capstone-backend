@@ -241,7 +241,7 @@ def update_supervisor_shortlist() -> Response:
         return Response("User not found", 404)
 
     for field in required_fields:
-        if field in body:
+        if field in body and body[field]:
             result[field] = body[field]
 
     mongo_helper.insert_doc(
@@ -549,3 +549,114 @@ def update_supervisor_project_info() -> Response:
     )
 
     return Response("Project info updated", 200)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/student/project_proposal/<supervisor_email>", methods=["GET"])
+def get_student_project_proposal(supervisor_email: str) -> Response:
+    user_details = authenticate(get_jwt_identity())
+
+    if not user_details or 'student' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    mongo_helper = MongoHelper(credentials)
+    result = mongo_helper.get_doc(
+        database='capstone',
+        collection='proposals',
+        query={'_id': hashlib.sha256(f"{user_details['email']}-{supervisor_email}".encode('UTF-8')).hexdigest()}
+    )
+
+    if not result:
+        return jsonify({'error': 'Proposal not found'})
+
+    return jsonify(result)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/student/project_proposal", methods=["POST"])
+def create_student_project_proposal() -> Response:
+    user_details = authenticate(get_jwt_identity())
+
+    if not user_details or 'student' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    required_fields = ('supervisor_email', 'title', 'aim', 'rationale')
+
+    body = request.get_json()
+    if not body or not all([field in body for field in required_fields]):
+        return Response(f"Empty body or Missing required fields {required_fields}", 400)
+
+    mongo_helper = MongoHelper(credentials)
+    result = mongo_helper.get_doc(
+        database='capstone',
+        collection='proposals',
+        query={'student_email': user_details['email'], 'supervisor_email': body['supervisor_email']}
+    )
+
+    if result:
+        return Response("Proposal already exists", 400)
+
+    result = mongo_helper.get_doc(
+        database='capstone',
+        collection='supervisors',
+        query={'_id': hashlib.sha256(body['supervisor_email'].encode('UTF-8')).hexdigest()}
+    )
+
+    if not result:
+        return Response("Supervisor not found", 400)
+
+    result = mongo_helper.get_doc(
+        database='capstone',
+        collection='students',
+        query={'_id': hashlib.sha256(user_details['email'].encode('UTF-8')).hexdigest()}
+    )
+
+    if not result:
+        return Response("Student not found", 400)
+
+    result = mongo_helper.get_doc(
+        database='capstone',
+        collection='proposals',
+        query={'student_email': user_details['email'], 'supervisor_email': body['supervisor_email']}
+    )
+
+    if result:
+        return Response("Proposal already exists", 400)
+
+    doc = {
+        '_id': hashlib.sha256(f"{user_details['email']}-{body['supervisor_email']}".encode('UTF-8')).hexdigest(),
+        'student_email': user_details['email'],
+        'supervisor_email': body['supervisor_email'],
+        'title': body['title'],
+        'aim': body['aim'],
+        'rationale': body['rationale'],
+    }
+
+    mongo_helper.insert_doc(
+        database='capstone',
+        collection='proposals',
+        record=doc
+    )
+
+    return Response("Proposal created", 200)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/supervisor/info/<supervisor_email>", methods=["GET"])
+def get_supervisor_info(supervisor_email: str) -> Response:
+    user_details = authenticate(get_jwt_identity())
+
+    if not user_details:
+        return Response("Unauthorized", 401)
+
+    mongo_helper = MongoHelper(credentials)
+    result = mongo_helper.get_doc(
+        database='capstone',
+        collection='supervisors',
+        query={'_id': hashlib.sha256(supervisor_email.encode('UTF-8')).hexdigest()}
+    )
+
+    if not result:
+        return Response("Supervisor not found", 400)
+
+    return jsonify(result)
