@@ -630,6 +630,7 @@ def create_student_project_proposal() -> Response:
         'title': body['title'],
         'aim': body['aim'],
         'rationale': body['rationale'],
+        'status': 'pending'
     }
 
     mongo_helper.insert_doc(
@@ -639,6 +640,27 @@ def create_student_project_proposal() -> Response:
     )
 
     return Response("Proposal created", 200)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/supervisor/info", methods=["GET"])
+def get_current_supervisor_info() -> Response:
+    user_details = authenticate(get_jwt_identity())
+
+    if not user_details or 'supervisor' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    mongo_helper = MongoHelper(credentials)
+    result = mongo_helper.get_doc(
+        database='capstone',
+        collection='supervisors',
+        query={'_id': user_details['_id']}
+    )
+
+    if not result:
+        return Response("Supervisor not found", 400)
+
+    return jsonify(result)
 
 
 @cross_origin(origin='*', headers=['Content-Type'])
@@ -660,3 +682,164 @@ def get_supervisor_info(supervisor_email: str) -> Response:
         return Response("Supervisor not found", 400)
 
     return jsonify(result)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/supervisor/pending_proposals", methods=["GET"])
+def get_supervisor_pending_proposal() -> Response:
+    user_details = authenticate(get_jwt_identity())
+
+    if not user_details or 'supervisor' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    mongo_helper = MongoHelper(credentials)
+    result = mongo_helper.get_docs(
+        database='capstone',
+        collection='proposals',
+        query={'supervisor_email': user_details['email'], 'status': 'pending'}
+    )
+
+    for proposal in result:
+        proposal['student_info'] = mongo_helper.get_doc(
+            database='capstone',
+            collection='students',
+            query={'_id': hashlib.sha256(proposal['student_email'].encode('UTF-8')).hexdigest()}
+        )
+
+        del proposal['supervisor_email']
+        del proposal['student_email']
+        del proposal['_id']
+
+    return jsonify(result)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/supervisor/update_proposal", methods=["POST"])
+def update_supervisor_proposal() -> Response:
+    user_details = authenticate(get_jwt_identity())
+
+    if not user_details or 'supervisor' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    required_fields = ('student_email', 'status', 'comment')
+
+    body = request.get_json()
+    if not body or not all([field in body for field in required_fields]):
+        return Response(f"Empty body or Missing required fields {required_fields}", 400)
+
+    if body['status'] not in ['accepted', 'rejected']:
+        return Response("Invalid status", 400)
+
+    mongo_helper = MongoHelper(credentials)
+    result = mongo_helper.get_doc(
+        database='capstone',
+        collection='proposals',
+        query={'_id': hashlib.sha256(f"{body['student_email']}-{user_details['email']}".encode('UTF-8')).hexdigest()}
+    )
+
+    if not result:
+        return Response("Proposal not found", 400)
+
+    result['status'] = body['status']
+    result['comment'] = body['comment']
+
+    mongo_helper.insert_doc(
+        database='capstone',
+        collection='proposals',
+        record=result
+    )
+
+    return Response("Proposal updated", 200)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/supervisor/pending_proposal", methods=["POST"])
+def update_supervisor_pending_proposal() -> Response:
+    user_details = authenticate(get_jwt_identity())
+
+    if not user_details or 'supervisor' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    required_fields = ('student_email', 'status', 'comment')
+    body = request.get_json()
+    if not body or not all([field in body for field in required_fields]):
+        return Response(f"Empty body or Missing required fields {required_fields}", 400)
+
+    if body['status'] not in ['accepted', 'rejected']:
+        return Response("Invalid status", 400)
+
+    mongo_helper = MongoHelper(credentials)
+    result = mongo_helper.get_doc(
+        database='capstone',
+        collection='proposals',
+        query={'_id': hashlib.sha256(f"{body['student_email']}-{user_details['email']}".encode('UTF-8')).hexdigest()}
+    )
+
+    if not result:
+        return Response("Proposal not found", 400)
+
+    result['status'] = body['status']
+    result['comment'] = body['comment']
+
+    mongo_helper.insert_doc(
+        database='capstone',
+        collection='proposals',
+        record=result
+    )
+
+    supervisor_info = mongo_helper.get_doc(
+        database='capstone',
+        collection='supervisors',
+        query={'_id': user_details['_id']}
+    )
+
+    if not supervisor_info:
+        return Response("Supervisor not found", 400)
+
+    if 'students' not in supervisor_info:
+        supervisor_info['students'] = []
+
+    if body['student_email'] in supervisor_info['students']:
+        return Response("Student already added", 400)
+
+    supervisor_info['students'].append(body['student_email'])
+    mongo_helper.insert_doc(
+        database='capstone',
+        collection='supervisors',
+        record=supervisor_info
+    )
+
+    return Response("Proposal updated", 200)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/supervisor/supervisees", methods=["GET"])
+def get_supervisor_supervisees() -> Response:
+    user_details = authenticate(get_jwt_identity())
+    if not user_details or 'supervisor' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    mongo_helper = MongoHelper(credentials)
+    result = mongo_helper.get_doc(
+        database='capstone',
+        collection='supervisors',
+        query={'_id': user_details['_id']}
+    )
+
+    if not result:
+        return Response("Supervisor not found", 400)
+
+    if 'students' not in result:
+        return Response("No supervisees found", 200)
+
+    for idx, student in enumerate(result['students']):
+        student_info = mongo_helper.get_doc(
+            database='capstone',
+            collection='students',
+            query={'_id': hashlib.sha256(student.encode('UTF-8')).hexdigest()}
+        )
+
+        del student_info['_id']
+        result['students'][idx] = student_info
+
+    return jsonify(result['students'])
