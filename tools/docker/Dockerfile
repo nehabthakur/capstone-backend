@@ -4,4 +4,4 @@ WORKDIR app/
 
 COPY . .
 
-RUN cd app && pip install -r requirements.txt
+RUN pip install -r requirements.txt
