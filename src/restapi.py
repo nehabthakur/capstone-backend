@@ -978,7 +978,7 @@ def get_supervisor_supervisees() -> Response:
         return Response("Supervisor not found", 400)
 
     if 'students' not in result:
-        return Response("No supervisees found", 200)
+        return Response("No supervisees found", 400)
 
     for idx, student in enumerate(result['students']):
         student_info = mongo_helper.get_doc(
