@@ -15,6 +15,7 @@ spec:
             backend:
               service:
                 name: capstone-project-service
-                port: 5000
+                port:
+                  number: 5000
 status:
   loadBalancer: {}
