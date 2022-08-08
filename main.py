@@ -4,6 +4,8 @@ import os
 import sys
 from datetime import timedelta
 
+from gevent.pywsgi import WSGIServer
+
 from src.app import app
 
 
@@ -31,7 +33,8 @@ def main():
     app.config['MONGO_CREDS'] = json.loads(os.environ['MONGO_CREDS'])
 
     logging.info("Starting Rest API server")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    http_server = WSGIServer(("0.0.0.0", 5000), app)
+    http_server.serve_forever()
 
 
 if __name__ == '__main__':
