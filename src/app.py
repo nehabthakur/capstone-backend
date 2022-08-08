@@ -22,11 +22,17 @@ cors = CORS(
 
 @app.before_request
 def before_request():
-    if request.path != '/sign-in':
+    if request.path not in ('/sign-in', '/'):
         verify_jwt_in_request()
 
     if request.method == 'OPTIONS':
         return Response(status=200)
+
+
+@app.route('/', methods=['GET'])
+@cross_origin(origin='*', headers=['Content-Type'])
+def index():
+    return jsonify({'message': 'Hello World!'})
 
 
 @app.route("/sign-in", methods=["POST"])
