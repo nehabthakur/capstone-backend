@@ -6,10 +6,15 @@ metadata:
   labels:
     app: capstone-project-app
 spec:
-  defaultBackend:
-    service:
-      name: capstone-project-service
-      port:
-        number: 5000
+  ingressClassName: capsone-project-nginx
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: capstone-project-service
+                port: 5000
 status:
   loadBalancer: {}
