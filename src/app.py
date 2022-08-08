@@ -1,13 +1,10 @@
 import hashlib
-import json
-import os
-from datetime import timedelta
 from io import StringIO
 from typing import Optional, Dict, Any
 
 import pandas as pd
 from flask import Flask, Response, jsonify, request
-from flask_cors import CORS, cross_origin
+from flask_cors import cross_origin, CORS
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, verify_jwt_in_request
 from werkzeug.utils import secure_filename
 
@@ -21,12 +18,6 @@ cors = CORS(
     allow_headers=["Content-Type", "Authorization", "Access-Control-Allow-Credentials"],
     supports_credentials=True
 )
-
-app.config['CORS_HEADERS'] = 'Content-Type'
-app.config['JWT_SECRET_KEY'] = 'dummy_secret'
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
-
-credentials = json.loads(os.environ['MONGO_CREDS'])
 
 
 @app.before_request
@@ -49,7 +40,7 @@ def sign_in() -> Response:
     email = body["email"]
     password_hash = hashlib.sha256(body["password"].encode('UTF-8')).hexdigest()
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_doc(
         database='capstone',
         collection='users',
@@ -68,7 +59,7 @@ def sign_in() -> Response:
 
 
 def authenticate(email) -> Optional[Dict[str, Any]]:
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     response = mongo_helper.get_doc(
         database='capstone',
         collection='users',
@@ -88,7 +79,7 @@ def get_all_supervisors() -> Response:
     if not user_details:
         return Response("User not found", 404)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
 
     result = mongo_helper.get_docs(
         database='capstone',
@@ -112,7 +103,7 @@ def get_supervisor(supervisor_id: str) -> Response:
     if not user_details:
         return Response("Unauthorized", 401)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_doc(
         database='capstone',
         collection='supervisors',
@@ -135,7 +126,7 @@ def get_supervisor_overview() -> Response:
     if not user_details or 'supervisor' not in user_details['roles']:
         return Response("Unauthorized", 401)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_doc(
         database='capstone',
         collection='supervisors',
@@ -163,7 +154,7 @@ def update_supervisor() -> Response:
     if not any([field in body for field in required_fields]):
         return Response(f"Required fields are {required_fields}", 400)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     _id = hashlib.sha256(body['email'].encode('UTF-8')).hexdigest()
 
     result = mongo_helper.get_doc(
@@ -198,7 +189,7 @@ def get_student_overview() -> Response:
     if not user_details or 'student' not in user_details['roles']:
         return Response("Unauthorized", 401)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_doc(
         database='capstone',
         collection='students',
@@ -229,7 +220,7 @@ def update_supervisor_shortlist() -> Response:
     if not any([field in body for field in required_fields]):
         return Response(f"Required fields are {required_fields}", 400)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
 
     result = mongo_helper.get_doc(
         database='capstone',
@@ -261,7 +252,7 @@ def get_student_shortlist() -> Response:
     if not user_details:
         return Response("Unauthorized", 401)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_doc(
         database='capstone',
         collection='students',
@@ -327,7 +318,7 @@ def update_student_info() -> Response:
     df['roles'] = [['student']] * len(df)
     users = df[['_id', 'email', 'name', 'password_hash', 'roles']].to_dict(orient='records')
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
 
     for student in students:
         mongo_helper.insert_doc(
@@ -392,7 +383,7 @@ def update_supervisor_info() -> Response:
     df['roles'] = [['supervisor', 'examiner']] * len(df)
     users = df[['_id', 'email', 'name', 'password_hash', 'roles']].to_dict(orient='records')
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
 
     for supervisor in supervisors:
         mongo_helper.insert_doc(
@@ -433,7 +424,8 @@ def update_supervisor_assignment_info() -> Response:
     if df.empty:
         return Response("No data found", 400)
 
-    required_columns = ('Student Id', 'Student Email', 'Student Name', 'Supervisor Id', 'Supervisor Email', 'Supervisor Name')
+    required_columns = (
+        'Student Id', 'Student Email', 'Student Name', 'Supervisor Id', 'Supervisor Email', 'Supervisor Name')
     if not all([column in df.columns for column in required_columns]):
         return Response(f"Required columns are {required_columns}", 400)
 
@@ -450,7 +442,7 @@ def update_supervisor_assignment_info() -> Response:
 
     df['_id'] = df['student_email'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
 
     for row in df.iterrows():
         student_info = mongo_helper.get_doc(
@@ -494,7 +486,9 @@ def update_secondary_examiner_info() -> Response:
     if df.empty:
         return Response("No data found", 400)
 
-    required_columns = ('Student Id', 'Student Email', 'Student Name', 'Secondary Examiner Id', 'Secondary Examiner Email', 'Secondary Examiner Name')
+    required_columns = (
+        'Student Id', 'Student Email', 'Student Name', 'Secondary Examiner Id', 'Secondary Examiner Email',
+        'Secondary Examiner Name')
     if not all([column in df.columns for column in required_columns]):
         return Response(f"Required columns are {required_columns}", 400)
 
@@ -510,7 +504,7 @@ def update_secondary_examiner_info() -> Response:
     df.rename(columns=column_mappings, inplace=True)
     df['_id'] = df['student_email'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
 
     for row in df.iterrows():
         result = mongo_helper.get_doc(
@@ -573,7 +567,7 @@ def update_final_grades() -> Response:
     df.rename(columns=column_mappings, inplace=True)
     df['_id'] = df['student_email'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
 
     for row in df.iterrows():
         result = mongo_helper.get_doc(
@@ -612,7 +606,7 @@ def update_student_project_info() -> Response:
     if not body or not all([field in body for field in required_fields]):
         return Response("Empty body or Missing required fields", 400)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_doc(
         database='capstone',
         collection='students',
@@ -650,7 +644,7 @@ def update_supervisor_project_info() -> Response:
     if not body or not all([field in body for field in required_fields]):
         return Response(f"Empty body or Missing required fields {required_fields}", 400)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_doc(
         database='capstone',
         collection='supervisors',
@@ -681,7 +675,7 @@ def get_student_project_proposal(supervisor_email: str) -> Response:
     if not user_details or 'student' not in user_details['roles']:
         return Response("Unauthorized", 401)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_doc(
         database='capstone',
         collection='proposals',
@@ -708,7 +702,7 @@ def create_student_project_proposal() -> Response:
     if not body or not all([field in body for field in required_fields]):
         return Response(f"Empty body or Missing required fields {required_fields}", 400)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_doc(
         database='capstone',
         collection='proposals',
@@ -772,7 +766,7 @@ def get_current_supervisor_info() -> Response:
     if not user_details or 'supervisor' not in user_details['roles']:
         return Response("Unauthorized", 401)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_doc(
         database='capstone',
         collection='supervisors',
@@ -793,7 +787,7 @@ def get_supervisor_info(supervisor_email: str) -> Response:
     if not user_details:
         return Response("Unauthorized", 401)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_doc(
         database='capstone',
         collection='supervisors',
@@ -814,7 +808,7 @@ def get_supervisor_pending_proposal() -> Response:
     if not user_details or 'supervisor' not in user_details['roles']:
         return Response("Unauthorized", 401)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_docs(
         database='capstone',
         collection='proposals',
@@ -852,7 +846,7 @@ def update_supervisor_proposal() -> Response:
     if body['status'] not in ['accepted', 'rejected']:
         return Response("Invalid status", 400)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_doc(
         database='capstone',
         collection='proposals',
@@ -890,7 +884,7 @@ def update_supervisor_pending_proposal() -> Response:
     if body['status'] not in ['accepted', 'rejected']:
         return Response("Invalid status", 400)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_doc(
         database='capstone',
         collection='proposals',
@@ -967,7 +961,7 @@ def get_supervisor_supervisees() -> Response:
     if not user_details or 'supervisor' not in user_details['roles']:
         return Response("Unauthorized", 401)
 
-    mongo_helper = MongoHelper(credentials)
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
     result = mongo_helper.get_doc(
         database='capstone',
         collection='supervisors',

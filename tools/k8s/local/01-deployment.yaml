@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: capstone-project-deployment
+  namespace: capstone-project
+  labels:
+    app: capstone-project-app
+spec:
+  revisionHistoryLimit: 0
+  replicas: 1
+  selector:
+    matchLabels:
+      app: capstone-project-app
+  template:
+    metadata:
+      labels:
+        app: capstone-project-app
+    spec:
+      containers:
+        - name: capstone-project-service
+          image: capstone-project:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 5000
+          resources:
+            limits:
+              cpu: "2"
+              memory: "512Mi"
+            requests:
+              cpu: "2"
+              memory: "512Mi"
+          command: [ "python" ]
+          args: [ "main.py" ]
+          env:
+            - name: MONGO_CREDS
+              value: '<MONGO_CREDS>'

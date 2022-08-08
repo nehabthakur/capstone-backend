@@ -1,5 +1,10 @@
+import json
 import logging
+import os
 import sys
+from datetime import timedelta
+
+from gevent.pywsgi import WSGIServer
 
 from src.app import app
 
@@ -22,8 +27,14 @@ def main():
          Once loaded, the application is started on port 5000.
     """
 
+    app.config['CORS_HEADERS'] = 'Content-Type'
+    app.config['JWT_SECRET_KEY'] = 'dummy_secret'
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
+    app.config['MONGO_CREDS'] = json.loads(os.environ['MONGO_CREDS'])
+
     logging.info("Starting Rest API server")
-    app.run(port=5000)
+    http_server = WSGIServer(("0.0.0.0", 5000), app)
+    http_server.serve_forever()
 
 
 if __name__ == '__main__':

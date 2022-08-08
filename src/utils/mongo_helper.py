@@ -12,6 +12,7 @@ class MongoHelper:
     """
         This is a helper class to run MongoDB operations such as get, create, insert, update, delete collection
     """
+
     def __init__(self, credentials: dict[str, str]):
         """
             This is a constructor that initializes MongoDB connection
@@ -101,5 +102,3 @@ class MongoHelper:
             This method will close the connection to MongoDB
         """
         self._client.close()
-
-

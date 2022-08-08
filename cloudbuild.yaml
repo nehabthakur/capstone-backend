@@ -19,14 +19,14 @@ steps:
       - |-
         set -euxo pipefail
         # Substituting template variables in kubernetes yaml files
-        sed -ie "s@<IMAGE>@$(echo ${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:latest)@g" tools/k8s/deployment.yaml
-        sed -ie "s@<MONGO_CREDS>@$(echo $$MONGO_CREDS)@g" tools/k8s/deployment.yaml
+        sed -ie "s@<IMAGE>@$(echo ${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:latest)@g" tools/k8s/gke/01-deployment.yaml
+        sed -ie "s@<MONGO_CREDS>@$(echo $$MONGO_CREDS)@g" tools/k8s/gke/01-deployment.yaml
     secretEnv: ['MONGO_CREDS']
 
   - name: gcr.io/cloud-builders/gke-deploy
     args:
       - run
-      - --filename=tools/k8s
+      - --filename=tools/k8s/gke
       - --location=${_LOCATION}
       - --cluster=${_GKE_CLUSTER_ID}
 
