@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: capstone-project-deployment
-  namespace: capstone-project
+  name: capstone-backend-deployment
+  namespace: capstone-backend
   labels:
-    app: capstone-project-app
+    app: capstone-backend-app
 spec:
   revisionHistoryLimit: 0
   replicas: 1
   selector:
     matchLabels:
-      app: capstone-project-app
+      app: capstone-backend-app
   template:
     metadata:
       labels:
-        app: capstone-project-app
+        app: capstone-backend-app
     spec:
       containers:
-        - name: capstone-project-service
+        - name: capstone-backend-service
           image: <IMAGE>
           imagePullPolicy: Always
           ports:
