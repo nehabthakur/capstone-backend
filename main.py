@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from src.restapi import app
+from src.app import app
 
 
 def init_logger():
@@ -23,7 +23,7 @@ def main():
     """
 
     logging.info("Starting Rest API server")
-    app.run(debug=True)
+    app.run(port=5000)
 
 
 if __name__ == '__main__':
