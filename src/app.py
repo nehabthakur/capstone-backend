@@ -524,7 +524,7 @@ def update_secondary_examiner_info() -> Response:
 
     mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
 
-    for row in df.iterrows():
+    for _, row in df.iterrows():
         result = mongo_helper.get_doc(
             database='capstone',
             collection='students',
@@ -590,7 +590,7 @@ def update_supervisor_assignment_info() -> Response:
 
     mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
 
-    for row in df.iterrows():
+    for _, row in df.iterrows():
         student_info = mongo_helper.get_doc(
             database='capstone',
             collection='students',
@@ -647,7 +647,7 @@ def update_final_grades() -> Response:
 
     mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
 
-    for row in df.iterrows():
+    for _, row in df.iterrows():
         result = mongo_helper.get_doc(
             database='capstone',
             collection='students',
