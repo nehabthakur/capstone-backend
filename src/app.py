@@ -320,7 +320,7 @@ def update_student_info() -> Response:
     df.rename(columns=column_mappings, inplace=True)
 
     df['_id'] = df['email'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
-    students = df.to_dict(orient='records')
+    students = df.drop(columns=['password_hash']).to_dict(orient='records')
     df['password_hash'] = df['password_hash'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
     df['roles'] = [['student']] * len(df)
     users = df[['_id', 'email', 'name', 'password_hash', 'roles']].to_dict(orient='records')
