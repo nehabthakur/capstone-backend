@@ -16,6 +16,9 @@ spec:
       labels:
         app: capstone-backend-app
     spec:
+      nodeSelector:
+        cloud.google.com/gke-spot: "true"
+      terminationGracePeriodSeconds: 25
       containers:
         - name: capstone-backend-service
           image: <IMAGE>

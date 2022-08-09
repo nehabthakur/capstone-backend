@@ -300,7 +300,7 @@ def update_student_info() -> Response:
         return Response("No data found", 400)
 
     required_columns = (
-        'Student Code', 'Name', 'Enrolment Status', 'Programme', 'Route', 'Start Date', 'QM Email', 'Username')
+        'Student Code', 'Name', 'Enrolment Status', 'Programme', 'Route', 'Start Date', 'QM Email', 'Username', 'Password')
 
     if not all([column in df.columns for column in required_columns]):
         return Response(f"Required columns are {required_columns}", 400)
@@ -313,14 +313,15 @@ def update_student_info() -> Response:
         'Route': 'route',
         'Start Date': 'start_date',
         'QM Email': 'email',
-        'Username': 'username'
+        'Username': 'username',
+        'Password': 'password_hash'
     }
 
     df.rename(columns=column_mappings, inplace=True)
 
     df['_id'] = df['email'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
     students = df.to_dict(orient='records')
-    df['password_hash'] = hashlib.sha256('user123'.encode('UTF-8')).hexdigest()
+    df['password_hash'] = df['password_hash'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
     df['roles'] = [['student']] * len(df)
     users = df[['_id', 'email', 'name', 'password_hash', 'roles']].to_dict(orient='records')
 
@@ -367,7 +368,7 @@ def update_supervisor_info() -> Response:
     if df.empty:
         return Response("No data found", 400)
 
-    required_columns = ('Supervisor Code', 'Name', 'Position', 'Department', 'QM Email', 'Username', 'Slots')
+    required_columns = ('Supervisor Code', 'Name', 'Position', 'Department', 'QM Email', 'Username', 'Password', 'Slots')
     if not all([column in df.columns for column in required_columns]):
         return Response(f"Required columns are {required_columns}", 400)
 
@@ -378,14 +379,15 @@ def update_supervisor_info() -> Response:
         'Department': 'department',
         'QM Email': 'email',
         'Username': 'username',
-        'Slots': 'slots'
+        'Slots': 'slots',
+        'Password': 'password_hash'
     }
 
     df.rename(columns=column_mappings, inplace=True)
 
     df['_id'] = df['email'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
     supervisors = df.to_dict(orient='records')
-    df['password_hash'] = hashlib.sha256('user123'.encode('UTF-8')).hexdigest()
+    df['password_hash'] = df['password_hash'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
     df['roles'] = [['supervisor', 'examiner']] * len(df)
     users = df[['_id', 'email', 'name', 'password_hash', 'roles']].to_dict(orient='records')
 
@@ -409,8 +411,8 @@ def update_supervisor_info() -> Response:
 
 
 @cross_origin(origin='*', headers=['Content-Type'])
-@app.route("/supervisor/assignment_info", methods=["POST"])
-def update_supervisor_assignment_info() -> Response:
+@app.route("/examiner/info", methods=["POST"])
+def update_examiner_info() -> Response:
     user_details = authenticate(get_jwt_identity())
     if not user_details or 'project_coordinator' not in user_details['roles']:
         return Response("Unauthorized", 401)
@@ -430,42 +432,52 @@ def update_supervisor_assignment_info() -> Response:
     if df.empty:
         return Response("No data found", 400)
 
-    required_columns = (
-        'Student Id', 'Student Email', 'Student Name', 'Supervisor Id', 'Supervisor Email', 'Supervisor Name')
+    required_columns = ('Examiner Code', 'Name', 'Position', 'Department', 'QM Email', 'Username', 'Password')
     if not all([column in df.columns for column in required_columns]):
         return Response(f"Required columns are {required_columns}", 400)
 
     column_mappings = {
-        'Student Id': 'student_id',
-        'Student Email': 'student_email',
-        'Student Name': 'student_name',
-        'Supervisor Id': 'supervisor_id',
-        'Supervisor Email': 'supervisor_email',
-        'Supervisor Name': 'supervisor_name'
+        'Examiner Code': 'examiner_code',
+        'Name': 'name',
+        'Position': 'position',
+        'Department': 'department',
+        'QM Email': 'email',
+        'Username': 'username',
+        'Password': 'password_hash'
     }
 
     df.rename(columns=column_mappings, inplace=True)
 
-    df['_id'] = df['student_email'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
+    df['_id'] = df['email'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
+    examiners = df.to_dict(orient='records')
+    df['password_hash'] = df['password_hash'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
+    df['roles'] = [['examiner']] * len(df)
+    users = df[['_id', 'email', 'name', 'password_hash', 'roles']].to_dict(orient='records')
 
     mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
 
-    for row in df.iterrows():
-        student_info = mongo_helper.get_doc(
+    for examiner in examiners:
+        examiner_info = mongo_helper.get_doc(
             database='capstone',
-            collection='students',
-            query={'_id': row['_id']}
+            collection='supervisors',
+            query={'_id': examiner['_id']}
         )
 
-        if not student_info:
-            continue
+        if not examiner_info:
+            mongo_helper.insert_doc(
+                database='capstone',
+                collection='supervisors',
+                record=examiner
+            )
 
-        student_info['supervisor'] = {
-            'email': row['supervisor_email'],
-            'name': row['supervisor_name']
-        }
+    for user in users:
+        mongo_helper.insert_doc(
+            database='capstone',
+            collection='users',
+            record=user
+        )
 
-    return Response("Success", 200)
+    return Response("Examiner info updated", 200)
 
 
 @cross_origin(origin='*', headers=['Content-Type'])
@@ -532,6 +544,66 @@ def update_secondary_examiner_info() -> Response:
             collection='students',
             record=result
         )
+
+    return Response("Success", 200)
+
+
+@cross_origin(origin='*', headers=['Content-Type'])
+@app.route("/supervisor/assignment_info", methods=["POST"])
+def update_supervisor_assignment_info() -> Response:
+    user_details = authenticate(get_jwt_identity())
+    if not user_details or 'project_coordinator' not in user_details['roles']:
+        return Response("Unauthorized", 401)
+
+    form_data = request.files.get('file')
+    if not form_data:
+        return Response("No file provided", 400)
+
+    file_name = secure_filename(form_data.filename)
+    if not file_name.endswith('.csv'):
+        return Response("File must be a CSV", 400)
+
+    file_data = form_data.read().decode('UTF-8')
+    df = pd.read_csv(StringIO(file_data))
+    df.drop_duplicates(inplace=True)
+
+    if df.empty:
+        return Response("No data found", 400)
+
+    required_columns = (
+        'Student Id', 'Student Email', 'Student Name', 'Supervisor Id', 'Supervisor Email', 'Supervisor Name')
+    if not all([column in df.columns for column in required_columns]):
+        return Response(f"Required columns are {required_columns}", 400)
+
+    column_mappings = {
+        'Student Id': 'student_id',
+        'Student Email': 'student_email',
+        'Student Name': 'student_name',
+        'Supervisor Id': 'supervisor_id',
+        'Supervisor Email': 'supervisor_email',
+        'Supervisor Name': 'supervisor_name'
+    }
+
+    df.rename(columns=column_mappings, inplace=True)
+
+    df['_id'] = df['student_email'].apply(lambda x: hashlib.sha256(x.encode('UTF-8')).hexdigest())
+
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
+
+    for row in df.iterrows():
+        student_info = mongo_helper.get_doc(
+            database='capstone',
+            collection='students',
+            query={'_id': row['_id']}
+        )
+
+        if not student_info:
+            continue
+
+        student_info['supervisor'] = {
+            'email': row['supervisor_email'],
+            'name': row['supervisor_name']
+        }
 
     return Response("Success", 200)
 
