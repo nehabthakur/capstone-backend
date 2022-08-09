@@ -306,7 +306,7 @@ def update_student_info() -> Response:
         return Response(f"Required columns are {required_columns}", 400)
 
     column_mappings = {
-        'Student Code': 'student_code',
+        'Student Code': 'id',
         'Name': 'name',
         'Enrolment Status': 'enrolment_status',
         'Programme': 'programme',
@@ -373,7 +373,7 @@ def update_supervisor_info() -> Response:
         return Response(f"Required columns are {required_columns}", 400)
 
     column_mappings = {
-        'Supervisor Code': 'supervisor_code',
+        'Supervisor Code': 'id',
         'Name': 'name',
         'Position': 'position',
         'Department': 'department',
