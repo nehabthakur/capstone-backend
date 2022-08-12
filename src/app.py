@@ -101,6 +101,30 @@ def get_all_supervisors() -> Response:
     return jsonify(output)
 
 
+@app.route("/student/all", methods=["GET"])
+@cross_origin(origin='*', headers=['Content-Type'])
+def get_all_students() -> Response:
+    user_details = authenticate(get_jwt_identity())
+
+    if not user_details:
+        return Response("User not found", 404)
+
+    mongo_helper = MongoHelper(app.config['MONGO_CREDS'])
+
+    result = mongo_helper.get_docs(
+        database='capstone',
+        collection='students',
+        query={}
+    )
+
+    output = []
+    for student in result:
+        del student["_id"]
+        output.append(student)
+
+    return jsonify(output)
+
+
 @app.route("/supervisor/<supervisor_id>", methods=["GET"])
 @cross_origin(origin='*', headers=['Content-Type'])
 def get_supervisor(supervisor_id: str) -> Response:

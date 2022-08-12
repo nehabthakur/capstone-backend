@@ -28,10 +28,10 @@ spec:
           resources:
             limits:
               cpu: "1"
-              memory: "128Mi"
+              memory: "196Mi"
             requests:
               cpu: "1"
-              memory: "128Mi"
+              memory: "196Mi"
           command: [ "python" ]
           args: [ "main.py" ]
           env:
