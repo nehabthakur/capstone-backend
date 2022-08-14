@@ -70,7 +70,7 @@ This will run the application using Kubernetes on the personal machine on port 5
 
 #### Steps
 1. Update the `MONGO_CREDS` in [K8s config](tools/k8s/local/01-deployment.yaml) in a json format `{"username": "<update the value here>","password":"<update the value here>","cluster_id":"<update the value here>"}`
-2. Build the docker image using `docker build -t playlist-sharify:latest -f tools/docker/Dockerfile .`
+2. Build the docker image using `docker build -t capstone-backend:latest -f tools/docker/Dockerfile .`
 3. Deploy image using `kubectl apply -f .\tools\k8s\local\`
 4. Application can be accessed using this [localhost:5000](http://localhost:5000)
 
