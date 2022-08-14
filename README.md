@@ -27,9 +27,9 @@ MongoDB is deployed as a SAAS tool in GCP to make sure the rest api has very low
 This application uses [Secret Manager (GCP)](https://cloud.google.com/secret-manager) to store secrets such as api keys for song data provider last-fm and mongodb credentials. 
 This provides a secure way to access the keys during runtime and helps avoid writing keys in the code.
 
-This application uses [Cloud Build (GCP)](https://cloud.google.com/build) to automatically build and deploy the code into GKE autopilot cluster whenever new commits are pushed to the [GitHub repo](https://github.com/nehabthakur/playlist-sharify) main branch.
+This application uses [Cloud Build (GCP)](https://cloud.google.com/build) to automatically build and deploy the code into GKE autopilot cluster whenever new commits are pushed to the [GitHub repo](https://github.com/nehabthakur/capstone-backend) master branch.
 We have adopted the [GitOps](https://www.weave.works/technologies/gitops/) methodology of CI/CD to automatically deploy changes once they're developed and tested.
-We have created a trigger in Cloud Build that continuously polls the GitHub repo's main branch and looks for [cloudbuild file](cloudbuild.yaml) and runs the following steps. 
+We have created a trigger in Cloud Build that continuously polls the GitHub repo's master branch and looks for [cloudbuild file](cloudbuild.yaml) and runs the following steps. 
 Builds the image and pushes it to [Artifact Registry (GCP)](https://cloud.google.com/artifact-registry). 
 It will then deploy the kubernetes config files defined in [tools/k8s/gke](tools/k8s/gke) to GKE Autopilot cluster automatically.
 
@@ -80,10 +80,10 @@ This will run the application using GKE autopilot on google cloud. Below are the
 #### Steps
 1. Create an [GKE Autopilot](https://console.cloud.google.com/kubernetes/list/overview) Cluster
 2. Create a secret in [Secret Manager](https://console.cloud.google.com/security/secret-manager) with name `mongodb_credentials` in a json format `{"username": "<update the value here>","password":"<update the value here>","cluster_id":"<update the value here>"}`
-3. Create a trigger in [Cloud Build](https://console.cloud.google.com/cloud-build/triggers) that triggers a build when a new commit is pushed to the main branch in GitHub
+3. Create a trigger in [Cloud Build](https://console.cloud.google.com/cloud-build/triggers) that triggers a build when a new commit is pushed to the master branch in GitHub
 4. Trigger should have the following properties:
    1. Event should be `Push to a branch`
-   2. Connect the GitHub Repo and set branch to `^main$`
+   2. Connect the GitHub Repo and set branch to `^master$`
    3. Configuration should use Cloud Build Configuration file
    4. Location should be Repository and set the configuration file to be `cloudbuild.yaml`
    5. Set the following substitution variables
